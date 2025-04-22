@@ -2,10 +2,10 @@ import { chromium, firefox } from "playwright";
 import { newInjectedContext } from "fingerprint-injector";
 import { checkTz } from "./tz_px.js";
 
-const url = "https://weldfatima.shop/";
+const url = "https://blog.cybertoolhub.space/";
 // Threads range
-const min = 5; // Minimum threads for task execution.
-const max = 10; // Maximum threads for task execution.
+const min =1; // Minimum threads for task execution.
+const max = 1; // Maximum threads for task execution.
 let bots;
 let views = 0;
 function generateRandomNumber(min, max) {
@@ -15,24 +15,6 @@ function generateRandomNumber(min, max) {
 const locations = [
   "se", // Sweden
   "se", // Sweden
-  "se", // Sweden
-  "se", // Sweden
-  "se", // Sweden
-  "se", // Sweden
-  "se", // Sweden
-  "se", // Sweden
-  "se", // Sweden
-  "se", // Sweden
-  "se", // Sweden
-  "se", // Sweden
-  "se", // Sweden
-  "se", // Sweden
-  "se", // Sweden
-  "se", // Sweden
-  "se", // Sweden
-  "se", // Sweden
-  "se", // Sweden
-
   "ua", // Ukraine
   "ua", // Ukraine
   "ua", // Ukraine
