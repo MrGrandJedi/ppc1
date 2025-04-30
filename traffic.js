@@ -240,7 +240,7 @@ const OpenBrowser = async (link, username) => {
     console.log(`Session type: "Regular"`);
 
     browser = await chromium.launch({
-      headless: false,
+      headless: true,
       proxy: {
         server: "us.smartproxy.com:10000",
         username: username,
