@@ -1,9 +1,11 @@
 import axios from "axios";
 import { HttpsProxyAgent } from "https-proxy-agent";
+import dotenv from "dotenv";
 
 export const checkTz = async (username) => {
-  const proxyHost = "148.113.161.141";
-  const proxyPort = "5959";
+  dotenv.config();
+  const proxyHost = "us.smartproxy.com";
+  const proxyPort = "10000";
   const proxyUsername = username;
   const proxyPassword = process.env.JEDI;
 
@@ -16,11 +18,6 @@ export const checkTz = async (username) => {
       "https://white-water-a7d6.mahdiidrissi2022.workers.dev/",
       {
         httpsAgent: proxyAgent,
-        timeout: 10000,
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        },
       }
     );
     const ipDetails = { timezone: response.data.trim() };
