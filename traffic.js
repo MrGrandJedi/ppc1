@@ -5,8 +5,8 @@ import dotenv from "dotenv";
 
 const url = "https://blog.cybertoolhub.space/";
 
-const MIN_BOTS = 1; // Minimum number of bots per batch
-const MAX_BOTS = 2; // Maximum number of bots per batch
+const MIN_BOTS = 5; // Minimum number of bots per batch
+const MAX_BOTS = 5; // Maximum number of bots per batch
 
 const generateUsername = () => {
   const locations = [
