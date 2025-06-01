@@ -2,10 +2,11 @@ import { chromium } from "playwright";
 import { newInjectedContext } from "fingerprint-injector";
 import { checkTz } from "./tz_px.js"; // Ensure this module is properly set up
 import dotenv from "dotenv";
-const fs = require("fs");
+
+import fs from "fs";
 
 // Load configuration from config.json
-const config = JSON.parse(fs.readFileSync("./config.json", "utf-8"));
+const config = JSON.parse(fs.readFileSync("./c.json", "utf-8"));
 
 const url = "https://blog.cybertoolhub.space/";
 
