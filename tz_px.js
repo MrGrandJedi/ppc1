@@ -1,6 +1,9 @@
 import axios from "axios";
 import { HttpsProxyAgent } from "https-proxy-agent";
 import dotenv from "dotenv";
+const fs = require("fs");
+
+// Load configuration from config.json
 const config = JSON.parse(fs.readFileSync("./c.json", "utf-8"));
 
 export const checkTz = async (username) => {
