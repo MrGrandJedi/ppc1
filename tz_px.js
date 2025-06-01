@@ -1,12 +1,12 @@
 import axios from "axios";
 import { HttpsProxyAgent } from "https-proxy-agent";
 import dotenv from "dotenv";
-const c = require("./c.json");
+const config = JSON.parse(fs.readFileSync("./c.json", "utf-8"));
 
 export const checkTz = async (username) => {
   dotenv.config();
-  const proxyHost = c.proxyHost;
-  const proxyPort = c.proxyPort;
+  const proxyHost = config.proxyHost;
+  const proxyPort = config.proxyPort;
   const proxyUsername = username;
   const proxyPassword = process.env.JEDI;
 
