@@ -2,87 +2,50 @@ import { chromium } from "playwright";
 import { newInjectedContext } from "fingerprint-injector";
 import { checkTz } from "./tz_px.js"; // Ensure this module is properly set up
 import dotenv from "dotenv";
+const fs = require("fs");
+
+// Load configuration from config.json
+const config = JSON.parse(fs.readFileSync("./config.json", "utf-8"));
 
 const url = "https://blog.cybertoolhub.space/";
 
 const MIN_BOTS = 5; // Minimum number of bots per batch
 const MAX_BOTS = 5; // Maximum number of bots per batch
 
-const generateUsername = () => {
-  const locations = [
-    "se", // Sweden
-    "se", // Sweden
-    "ua", // Ukraine
-    "ua", // Ukraine
-    "at", // Austria
-    "at", // Austria
-    "fr", // France
-    "fr", // France
-    "fr", // France
-    "fr", // France
-    "ca", // Canada
-    "ca", // Canada
-    "ca", // Canada
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "us", // United States
-    "uk", // United Kingdom
-    "uk", // United Kingdom
-    "uk", // United Kingdom
-    "uk", // United Kingdom
-    "uk", // United Kingdom
-    "de", // Germany
-    "jp", // Japan
-    "sg", // Singapore
-    "kr", // South Korea
-    "it", // Italy
-    "es", // Spain
-    "in", // India
-    "id", // Indonesia
-    "ph", // Philippines
-    "th", // Thailand
-    "tr", // Turkey
-    "mx", // Mexico (geographical proximity, U.S. ties)
-    "no", // Norway
-    "hk", // Hong Kong
-  ];
+// Define the weighted locations for generating usernames
+const weightedLocations = {
+  se: 2,
+  ua: 2,
+  at: 2,
+  fr: 4,
+  ca: 3,
+  us: 30,
+  uk: 5,
+  de: 1,
+  jp: 1,
+  sg: 1,
+  kr: 1,
+  it: 1,
+  es: 1,
+  in: 1,
+  id: 1,
+  ph: 1,
+  th: 1,
+  tr: 1,
+  mx: 1,
+  no: 1,
+  hk: 1,
+};
 
-  return `user-doublemobmedia-sessionduration-10-country-${
-    locations[Math.floor(Math.random() * locations.length)]
-  }-session-${Math.floor(10000 + Math.random() * 90000)}`;
+// Build weighted list
+const locations = Object.entries(weightedLocations).flatMap(([code, weight]) =>
+  Array(weight).fill(code)
+);
+
+const generateUsername = () => {
+  const code = locations[Math.floor(Math.random() * locations.length)];
+  const rand = Math.floor(10000 + Math.random() * 90000);
+  return config.proxyUser.replace("%CODE%", code).replace("%RAND%", rand);
 };
 
 const realisticHeaders = {
@@ -242,7 +205,7 @@ const OpenBrowser = async (link, username) => {
     browser = await chromium.launch({
       headless: true,
       proxy: {
-        server: "us.smartproxy.com:10000",
+        server: config.proxyHost + ":" + config.proxyPort,
         username: username,
         password: process.env.JEDI,
       },
