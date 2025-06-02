@@ -8,14 +8,14 @@ import fs from "fs";
 // Load configuration from config.json
 const config = JSON.parse(fs.readFileSync("./c.json", "utf-8"));
 
-const url = "https://web.lumeo.click/";
+const url = "https://blog.cybertoolhub.space/";
 
-const MIN_BOTS = 2; // Minimum number of bots per batch
-const MAX_BOTS = 2; // Maximum number of bots per batch
+const MIN_BOTS = 6; // Minimum number of bots per batch
+const MAX_BOTS = 6; // Maximum number of bots per batch
 
 // Define the weighted locations for generating usernames
 const weightedLocations = {
-  se: 10,
+  se: 5,
   ua: 2,
   at: 2,
   fr: 4,
