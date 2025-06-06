@@ -15,15 +15,134 @@ const MAX_BOTS = 6; // Maximum number of bots per batch
 
 // Define the weighted locations for generating usernames
 const weightedLocations = {
-  se: 5,
+  se: 10,
   ua: 2,
   at: 2,
   fr: 4,
   ca: 3,
   us: 30,
-  uk: 5,
- dk : 20,
+  uk: 10,
+  dk: 5,
 };
+export const generateNoise = () => {
+  const shift = {
+    r: Math.floor(Math.random() * 5) - 2,
+    g: Math.floor(Math.random() * 5) - 2,
+    b: Math.floor(Math.random() * 5) - 2,
+    a: Math.floor(Math.random() * 5) - 2,
+  };
+  const webglNoise = (Math.random() - 0.5) * 0.01;
+  const clientRectsNoise = {
+    deltaX: (Math.random() - 0.5) * 2,
+    deltaY: (Math.random() - 0.5) * 2,
+  };
+  const audioNoise = (Math.random() - 0.5) * 0.000001;
+
+  return { shift, webglNoise, clientRectsNoise, audioNoise };
+};
+
+export const noisifyScript = (noise) => `
+  (function() {
+    const noise = ${JSON.stringify(noise)};
+
+    // Canvas Noisify
+    const getImageData = CanvasRenderingContext2D.prototype.getImageData;
+    const noisify = function (canvas, context) {
+      if (context) {
+        const shift = noise.shift;
+        const width = canvas.width;
+        const height = canvas.height;
+        if (width && height) {
+          const imageData = getImageData.apply(context, [0, 0, width, height]);
+          for (let i = 0; i < height; i++) {
+            for (let j = 0; j < width; j++) {
+              const n = ((i * (width * 4)) + (j * 4));
+              imageData.data[n + 0] = imageData.data[n + 0] + shift.r;
+              imageData.data[n + 1] = imageData.data[n + 1] + shift.g;
+              imageData.data[n + 2] = imageData.data[n + 2] + shift.b;
+              imageData.data[n + 3] = imageData.data[n + 3] + shift.a;
+            }
+          }
+          context.putImageData(imageData, 0, 0); 
+        }
+      }
+    };
+    HTMLCanvasElement.prototype.toBlob = new Proxy(HTMLCanvasElement.prototype.toBlob, {
+      apply(target, self, args) {
+        noisify(self, self.getContext("2d"));
+        return Reflect.apply(target, self, args);
+      }
+    });
+    HTMLCanvasElement.prototype.toDataURL = new Proxy(HTMLCanvasElement.prototype.toDataURL, {
+      apply(target, self, args) {
+        noisify(self, self.getContext("2d"));
+        return Reflect.apply(target, self, args);
+      }
+    });
+    CanvasRenderingContext2D.prototype.getImageData = new Proxy(CanvasRenderingContext2D.prototype.getImageData, {
+      apply(target, self, args) {
+        noisify(self.canvas, self);
+        return Reflect.apply(target, self, args);
+      }
+    });
+
+    // Audio Noisify
+    const originalGetChannelData = AudioBuffer.prototype.getChannelData;
+    AudioBuffer.prototype.getChannelData = function() {
+      const results = originalGetChannelData.apply(this, arguments);
+      for (let i = 0; i < results.length; i++) {
+        results[i] += noise.audioNoise; // Smaller variation
+      }
+      return results;
+    };
+
+    const originalCopyFromChannel = AudioBuffer.prototype.copyFromChannel;
+    AudioBuffer.prototype.copyFromChannel = function() {
+      const channelData = new Float32Array(arguments[1]);
+      for (let i = 0; i < channelData.length; i++) {
+        channelData[i] += noise.audioNoise; // Smaller variation
+      }
+      return originalCopyFromChannel.apply(this, [channelData, ...Array.prototype.slice.call(arguments, 1)]);
+    };
+
+    const originalCopyToChannel = AudioBuffer.prototype.copyToChannel;
+    AudioBuffer.prototype.copyToChannel = function() {
+      const channelData = arguments[0];
+      for (let i = 0; i < channelData.length; i++) {
+        channelData[i] += noise.audioNoise; // Smaller variation
+      }
+      return originalCopyToChannel.apply(this, arguments);
+    };
+
+    // WebGL Noisify
+    const originalGetParameter = WebGLRenderingContext.prototype.getParameter;
+    WebGLRenderingContext.prototype.getParameter = function() {
+      const value = originalGetParameter.apply(this, arguments);
+      if (typeof value === 'number') {
+        return value + noise.webglNoise; // Small random variation
+      }
+      return value;
+    };
+
+    // ClientRects Noisify
+    const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function() {
+      const rect = originalGetBoundingClientRect.apply(this, arguments);
+      const deltaX = noise.clientRectsNoise.deltaX; // Random shift between -1 and 1
+      const deltaY = noise.clientRectsNoise.deltaY; // Random shift between -1 and 1
+      return {
+        x: rect.x + deltaX,
+        y: rect.y + deltaY,
+        width: rect.width + deltaX,
+        height: rect.height + deltaY,
+        top: rect.top + deltaY,
+        right: rect.right + deltaX,
+        bottom: rect.bottom + deltaY,
+        left: rect.left + deltaX
+      };
+    };
+  })();
+`;
 
 // Build weighted list
 const locations = Object.entries(weightedLocations).flatMap(([code, weight]) =>
@@ -77,6 +196,98 @@ const generateGoogleReferer = () => {
   });
 
   return `https://www.google.com/search?${params}`;
+};
+
+const generateFingerprintOptions = () => {
+  const isMobile = Math.random() < 0.8;
+
+  if (isMobile) {
+    // Decide Android vs. iOS
+    const isAndroid = Math.random() < 0.7;
+
+    if (isAndroid) {
+      // Android browsers and a list of common screen resolutions
+      const androidBrowsers = ["chrome", "firefox", "edge", "opera", "samsung"];
+      const androidResolutions = [
+        { width: 360, height: 640 },
+        { width: 360, height: 760 },
+        { width: 360, height: 780 },
+        { width: 360, height: 800 },
+        { width: 375, height: 667 },
+        { width: 390, height: 844 },
+        { width: 393, height: 851 },
+        { width: 411, height: 731 },
+        { width: 412, height: 915 },
+        { width: 414, height: 896 },
+      ];
+
+      const browser =
+        androidBrowsers[Math.floor(Math.random() * androidBrowsers.length)];
+      const screen =
+        androidResolutions[
+          Math.floor(Math.random() * androidResolutions.length)
+        ];
+
+      return {
+        devices: ["mobile"],
+        browsers: [browser],
+        operatingSystems: ["android"],
+        locales: [["en-US", "en-GB", "fr-FR"][Math.floor(Math.random() * 3)]],
+        screen,
+      };
+    } else {
+      // A few realistic iOS variants (all use Safari on iOS)
+      const iosVariants = [
+        { width: 375, height: 812 }, // iPhone X/11 Pro
+        { width: 390, height: 844 }, // iPhone 12/13/14
+        { width: 414, height: 896 }, // iPhone 11 Pro Max/XS Max
+        { width: 428, height: 926 }, // iPhone 12/13/14 Pro Max
+      ];
+      const pick = iosVariants[Math.floor(Math.random() * iosVariants.length)];
+
+      return {
+        devices: ["mobile"],
+        browsers: ["safari"],
+        operatingSystems: ["ios"],
+        locales: [["en-US", "en-GB", "fr-FR"][Math.floor(Math.random() * 3)]],
+        screen: pick,
+      };
+    }
+  } else {
+    // 20% chance desktop: pick one of four common combos
+    const desktopVariants = [
+      {
+        browser: "chrome",
+        os: "windows",
+        screen: { width: 1920, height: 1080 },
+      },
+      {
+        browser: "firefox",
+        os: "linux",
+        screen: { width: 1366, height: 768 },
+      },
+      {
+        browser: "edge",
+        os: "windows",
+        screen: { width: 1600, height: 900 },
+      },
+      {
+        browser: "safari",
+        os: "macos",
+        screen: { width: 1440, height: 900 },
+      },
+    ];
+    const pick =
+      desktopVariants[Math.floor(Math.random() * desktopVariants.length)];
+
+    return {
+      devices: ["desktop"],
+      browsers: [pick.browser],
+      operatingSystems: [pick.os],
+      locales: [["en-US", "en-GB", "fr-FR"][Math.floor(Math.random() * 3)]],
+      screen: pick.screen,
+    };
+  }
 };
 
 const getRandomReferer = () => {
@@ -187,7 +398,14 @@ const OpenBrowser = async (link, username) => {
   let browser = null;
   let context = null;
 
+  const timezone = await checkTz(username);
+  if (timezone == undefined) {
+    return;
+  }
+
   try {
+    const noise = generateNoise();
+
     console.log(`Session type: "Regular"`);
 
     browser = await chromium.launch({
@@ -198,23 +416,13 @@ const OpenBrowser = async (link, username) => {
         password: process.env.JEDI,
       },
     });
-    let operatingSystems = ["chrome", "firefox", "safari", "edge"][
-      Math.floor(Math.random() * 4)
-    ];
+
+    const randomfingerprintOptions = generateFingerprintOptions();
+
     context = await newInjectedContext(browser, {
-      fingerprintOptions: {
-        devices: [Math.random() < 0.5 ? "desktop" : "mobile"],
-        browsers: [operatingSystems],
-        operatingSystems: [
-          ["windows", "macos", "linux", "android", "ios"][
-            Math.floor(Math.random() * 5)
-          ],
-        ],
-        locales: [["en-US", "en-GB", "fr-FR"][Math.floor(Math.random() * 3)]],
-        screen: {
-          width: Math.random() < 0.8 ? 1920 : 1366,
-          height: Math.random() < 0.8 ? 1080 : 768,
-        },
+      fingerprintOptions: randomfingerprintOptions,
+      newContextOptions: {
+        timezoneId: timezone || "America/New_York",
       },
     });
 
@@ -236,6 +444,8 @@ const OpenBrowser = async (link, username) => {
         ? route.abort()
         : route.continue();
     });
+
+    await page.addInitScript(noisifyScript(noise));
 
     // Add human-like delays
     await page.goto(link, {
