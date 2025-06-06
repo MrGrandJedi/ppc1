@@ -31,7 +31,7 @@ const locations = Object.entries(weightedLocations).flatMap(([code, weight]) =>
 
 // Statistics trackers
 let totalSuccess = 0;
-const successfulUsers = [];
+
 const countryCounts = {};
 
 // Noise helpers
@@ -431,11 +431,11 @@ const OpenBrowser = async (link, username, country) => {
   } finally {
     if (wasSuccessful) {
       totalSuccess += 1;
-      successfulUsers.push(username);
+
       countryCounts[country] = (countryCounts[country] || 0) + 1;
 
       // Logging block
-      console.log("\n++++ Session Success ++++");
+      console.log("\n+-+- Session Success -+-+");
       console.log(`User: ${username}`);
       console.log(`Country: ${country}`);
       console.log(`Total Successful Sessions: ${totalSuccess}`);
@@ -443,9 +443,8 @@ const OpenBrowser = async (link, username, country) => {
       for (const [code, count] of Object.entries(countryCounts)) {
         console.log(`  - ${code.toUpperCase()}: ${count}`);
       }
-      console.log("Usernames so far:");
-      console.log(successfulUsers.join(", "));
-      console.log("++++ ++++ ++++ ++++++\n");
+
+      console.log("+++++++++++++++++++++++++\n");
     }
 
     try {
