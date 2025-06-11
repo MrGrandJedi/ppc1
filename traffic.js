@@ -9,18 +9,18 @@ const config = JSON.parse(fs.readFileSync("./c.json", "utf-8"));
 
 const url = "https://blog.cybertoolhub.space/";
 
-const MIN_BOTS = 6; // Minimum number of bots per batch
-const MAX_BOTS = 6; // Maximum number of bots per batch
+const MIN_BOTS = 12; // Minimum number of bots per batch
+const MAX_BOTS = 12; // Maximum number of bots per batch
 
 // Define the weighted locations for generating usernames
 const weightedLocations = {
-  se: 10,
+  se: 20,
   ua: 2,
   at: 2,
   fr: 4,
   ca: 3,
   us: 30,
-  uk: 10,
+  uk: 3,
   dk: 5,
 };
 
