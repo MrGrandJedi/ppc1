@@ -1,57 +1,21 @@
 import { chromium } from "playwright";
 import { newInjectedContext } from "fingerprint-injector";
-import { checkTz } from "./tz_px.js"; // Ensure this module is properly set up
+import UserAgent from "user-agents";
+import { checkTz } from "./tz_px.js";
 import dotenv from "dotenv";
 import fs from "fs";
+import fetch from "node-fetch";
 
-// Load configuration from config.json
+// Load environment variables from .env file
+
+dotenv.config();
+const JEDI = process.env.JEDI;
 const config = JSON.parse(fs.readFileSync("./c.json", "utf-8"));
 
-const url = "https://blog.cybertoolhub.space/";
-
-const MIN_BOTS = 12; // Minimum number of bots per batch
-const MAX_BOTS = 12; // Maximum number of bots per batch
-
-// Define the weighted locations for generating usernames
-const weightedLocations = {
-  se: 20,
-  ua: 2,
-  at: 2,
-  fr: 4,
-  ca: 3,
-  us: 30,
-  uk: 3,
-  dk: 5,
-};
-
-// Build weighted list of country codes
-const locations = Object.entries(weightedLocations).flatMap(([code, weight]) =>
-  Array(weight).fill(code)
-);
-
-// Statistics trackers
-let totalSuccess = 0;
-
-const countryCounts = {};
-
-// Noise helpers
-export const generateNoise = () => {
-  const shift = {
-    r: Math.floor(Math.random() * 5) - 2,
-    g: Math.floor(Math.random() * 5) - 2,
-    b: Math.floor(Math.random() * 5) - 2,
-    a: Math.floor(Math.random() * 5) - 2,
-  };
-  const webglNoise = (Math.random() - 0.5) * 0.01;
-  const clientRectsNoise = {
-    deltaX: (Math.random() - 0.5) * 2,
-    deltaY: (Math.random() - 0.5) * 2,
-  };
-  const audioNoise = (Math.random() - 0.5) * 0.000001;
-
-  return { shift, webglNoise, clientRectsNoise, audioNoise };
-};
-
+const CONFIG_URL = "https://ppc-data.pages.dev/data.json";
+let globalConfig;
+let globalMatch;
+let counter = 0;
 export const noisifyScript = (noise) => `
   (function() {
     const noise = ${JSON.stringify(noise)};
@@ -152,14 +116,70 @@ export const noisifyScript = (noise) => `
   })();
 `;
 
-// Generate a username **and** return its country code
-const generateUsername = () => {
-  const code = locations[Math.floor(Math.random() * locations.length)];
-  const rand = Math.floor(10000 + Math.random() * 90000);
+const generateNoise = () => {
+  const shift = {
+    r: Math.floor(Math.random() * 5) - 2,
+    g: Math.floor(Math.random() * 5) - 2,
+    b: Math.floor(Math.random() * 5) - 2,
+    a: Math.floor(Math.random() * 5) - 2,
+  };
+  const webglNoise = (Math.random() - 0.5) * 0.01;
+  const clientRectsNoise = {
+    deltaX: (Math.random() - 0.5) * 2,
+    deltaY: (Math.random() - 0.5) * 2,
+  };
+  const audioNoise = (Math.random() - 0.5) * 0.000001;
+
+  return { shift, webglNoise, clientRectsNoise, audioNoise };
+};
+
+const weightedPick = (arr) => {
+  if (!Array.isArray(arr) || arr.length === 0) return null;
+  const total = arr.reduce((sum, o) => sum + o.weight, 0);
+  let r = Math.random() * total;
+  for (const o of arr) {
+    r -= o.weight;
+    if (r <= 0) return o;
+  }
+  return arr[arr.length - 1];
+};
+
+const pickTreeConfig = (urlObj) => {
+  const url = urlObj.url.toLowerCase();
+
+  const country = weightedPick(urlObj.countries);
+  if (!country) throw new Error("No country picked");
+
+  const code = country.code.toLowerCase();
+  const countryName = country.name.toLowerCase();
+
+  const device = weightedPick(country.devices);
+  if (!device) throw new Error("No device picked");
+
+  const screen = weightedPick(device.screens) || { width: 1280, height: 720 };
+
+  const os = weightedPick(device.os);
+  if (!os) throw new Error("No OS picked");
+
+  const browser = weightedPick(os.browsers);
+  if (!browser) throw new Error("No browser picked");
+
+  const rand = Math.floor(10000 + Math.random() * 900000);
+
   const username = config.proxyUser
     .replace("%CODE%", code)
     .replace("%RAND%", rand);
-  return { username, code };
+
+  return {
+    url,
+    code,
+    device: device.name.toLowerCase(),
+    screen: { width: screen.width, height: screen.height },
+    os: os.name.toLowerCase(),
+    browserdata: browser.name.toLowerCase(),
+    username: username.toLowerCase(),
+    countryName,
+  };
 };
 
 const realisticHeaders = {
@@ -202,88 +222,6 @@ const generateGoogleReferer = () => {
     pdd: "1",
   });
   return `https://www.google.com/search?${params}`;
-};
-
-const generateFingerprintOptions = () => {
-  const isMobile = Math.random() < 0.8;
-  if (isMobile) {
-    const isAndroid = Math.random() < 0.7;
-    if (isAndroid) {
-      const androidBrowsers = ["chrome", "firefox", "edge", "samsung"];
-      const androidResolutions = [
-        { width: 360, height: 640 },
-        { width: 360, height: 760 },
-        { width: 360, height: 780 },
-        { width: 360, height: 800 },
-        { width: 375, height: 667 },
-        { width: 390, height: 844 },
-        { width: 393, height: 851 },
-        { width: 411, height: 731 },
-        { width: 412, height: 915 },
-        { width: 414, height: 896 },
-      ];
-      const browser =
-        androidBrowsers[Math.floor(Math.random() * androidBrowsers.length)];
-      const screen =
-        androidResolutions[
-          Math.floor(Math.random() * androidResolutions.length)
-        ];
-      return {
-        devices: ["mobile"],
-        browsers: [browser],
-        operatingSystems: ["android"],
-        locales: [["en-US", "en-GB", "fr-FR"][Math.floor(Math.random() * 3)]],
-        screen,
-      };
-    } else {
-      const iosVariants = [
-        { width: 375, height: 812 },
-        { width: 390, height: 844 },
-        { width: 414, height: 896 },
-        { width: 428, height: 926 },
-      ];
-      const pick = iosVariants[Math.floor(Math.random() * iosVariants.length)];
-      return {
-        devices: ["mobile"],
-        browsers: ["safari"],
-        operatingSystems: ["ios"],
-        locales: [["en-US", "en-GB", "fr-FR"][Math.floor(Math.random() * 3)]],
-        screen: pick,
-      };
-    }
-  } else {
-    const desktopVariants = [
-      {
-        browser: "chrome",
-        os: "windows",
-        screen: { width: 1920, height: 1080 },
-      },
-      {
-        browser: "firefox",
-        os: "linux",
-        screen: { width: 1366, height: 768 },
-      },
-      {
-        browser: "edge",
-        os: "windows",
-        screen: { width: 1600, height: 900 },
-      },
-      {
-        browser: "safari",
-        os: "macos",
-        screen: { width: 1440, height: 900 },
-      },
-    ];
-    const pick =
-      desktopVariants[Math.floor(Math.random() * desktopVariants.length)];
-    return {
-      devices: ["desktop"],
-      browsers: [pick.browser],
-      operatingSystems: [pick.os],
-      locales: [["en-US", "en-GB", "fr-FR"][Math.floor(Math.random() * 3)]],
-      screen: pick.screen,
-    };
-  }
 };
 
 const getRandomReferer = () => {
@@ -338,16 +276,6 @@ const realisticScroll = async (page) => {
   }
 };
 
-const getUserAgent = (referer) => {
-  if (referer.includes("google.com")) {
-    return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-  }
-  if (referer.includes("facebook.com")) {
-    return "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
-  }
-  return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-};
-
 const humanInteraction = async (page) => {
   for (const action of humanMouseMovements) {
     if (action.type === "move") {
@@ -374,16 +302,47 @@ const humanInteraction = async (page) => {
   }
 };
 
-const OpenBrowser = async (link, username, country) => {
-  dotenv.config();
+const OpenBrowser = async ({
+  url,
+  code,
+  device,
+  screen,
+  os,
+  browserdata,
+  username,
+  countryName,
+}) => {
+  if (
+    !url ||
+    !code ||
+    !device ||
+    !screen ||
+    !os ||
+    !browserdata ||
+    !username ||
+    !countryName
+  ) {
+    throw new Error(
+      "Invalid configuration for OpenBrowser: Missing required parameters"
+    );
+  }
+
   let browser = null;
   let context = null;
-  let wasSuccessful = false;
-
-  const timezone = await checkTz(username);
-  if (!timezone) return;
+  let page = null;
 
   try {
+    const timezone = await Promise.race([
+      checkTz(username),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Timezone check timeout")), 30000)
+      ),
+    ]);
+
+    if (!timezone) {
+      throw new Error("Failed to get timezone");
+    }
+
     const noise = generateNoise();
     browser = await chromium.launch({
       headless: true,
@@ -394,18 +353,25 @@ const OpenBrowser = async (link, username, country) => {
       },
     });
 
-    const randomFingerprintOptions = generateFingerprintOptions();
     context = await newInjectedContext(browser, {
-      fingerprintOptions: randomFingerprintOptions,
+      fingerprintOptions: {
+        devices: [device],
+        browsers: [browserdata],
+        operatingSystems: [os],
+        locales: [["en-US", "en-GB", "fr-FR"][Math.floor(Math.random() * 3)]],
+        screen: { width: screen.width, height: screen.height },
+      },
+      mockWebRTC: true,
       newContextOptions: { timezoneId: timezone },
     });
 
     const randomReferer = getRandomReferer();
-    const page = await context.newPage();
+    const userAgent = new UserAgent();
+    page = await context.newPage();
 
     await page.setExtraHTTPHeaders({
       ...realisticHeaders,
-      "user-agent": getUserAgent(randomReferer),
+      "user-agent": userAgent.toString(),
       referer: randomReferer,
     });
 
@@ -419,65 +385,120 @@ const OpenBrowser = async (link, username, country) => {
 
     await page.addInitScript(noisifyScript(noise));
 
-    await page.goto(link, { waitUntil: "domcontentloaded", timeout: 60000 });
+    await Promise.race([
+      page.goto(url, { waitUntil: "domcontentloaded" }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Page load timeout")), 60000)
+      ),
+    ]);
+
     await page.waitForTimeout(2000 + Math.random() * 3000);
+
     await realisticScroll(page);
     await humanInteraction(page);
-    await page.waitForTimeout(15000 + Math.random() * 25000);
+    await page.waitForTimeout(10000 + Math.random() * 25000);
 
-    wasSuccessful = true;
-  } catch {
-    // Failure does not count toward success stats
+    console.log(
+      `[SUCCESS] Visited ${url} (${countryName}, ${device}, ${os}, ${browserdata})`
+    );
+  } catch (err) {
+    console.error(`[ERROR] Browser session failed: ${err.message}`);
+    throw err;
   } finally {
-    if (wasSuccessful) {
-      totalSuccess += 1;
-
-      countryCounts[country] = (countryCounts[country] || 0) + 1;
-
-      // Logging block
-      console.log("\n+-+- Session Success -+-+");
-      console.log(`User: ${username}`);
-      console.log(`Country: ${country}`);
-      console.log(`Total Successful Sessions: ${totalSuccess}`);
-      console.log("Country Counts:");
-      for (const [code, count] of Object.entries(countryCounts)) {
-        console.log(`  - ${code.toUpperCase()}: ${count}`);
-      }
-
-      console.log("+++++++++++++++++++++++++\n");
-    }
-
     try {
-      if (context) await context.close();
-      if (browser) await browser.close();
-    } catch {
-      // ignore cleanup errors
+      if (page) await page.close().catch(() => {});
+      if (context) await context.close().catch(() => {});
+      if (browser) await browser.close().catch(() => {});
+    } catch (err) {
+      console.error("Error during cleanup:", err.message);
     }
   }
 };
 
-const tasksPoll = async () => {
-  const bots = Math.floor(Math.random() * (MAX_BOTS - MIN_BOTS + 1)) + MIN_BOTS;
-  const tasks = Array.from({ length: bots }).map(() => {
-    const { username, code: country } = generateUsername();
-    return OpenBrowser(url, username, country);
-  });
-  await Promise.all(tasks);
+const loadConfig = async () => {
+  try {
+    const configPromise = fetch(CONFIG_URL);
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Config fetch timeout")), 10000)
+    );
+
+    const res = await Promise.race([configPromise, timeoutPromise]);
+    const json = await res.json();
+
+    if (!Array.isArray(json)) {
+      throw new Error("Invalid config format: expected array");
+    }
+
+    // Find matching workflow
+    globalMatch = json.find((item) => item.workflow === config.workflow);
+
+    if (!globalMatch) {
+      throw new Error(`No matching workflow found for: ${config.workflow}`);
+    }
+
+    if (!Array.isArray(globalMatch.config)) {
+      throw new Error("Invalid workflow config format: expected array");
+    }
+  } catch (err) {
+    console.error("[CONFIG] Failed to fetch/parse config:", err.message);
+    setTimeout(loadConfig, 3000);
+  }
+};
+
+const startWorker = async (id, urlObj) => {
+  try {
+    const workerPromise = (async () => {
+      try {
+        const session = pickTreeConfig(urlObj);
+        await OpenBrowser(session);
+      } catch (err) {
+        console.error(`Worker ${id} (${urlObj.url}) error:`, err.message);
+        throw err;
+      }
+    })();
+
+    // Use Promise.race to handle timeout cleanly
+    await Promise.race([
+      workerPromise,
+      new Promise((_, reject) =>
+        setTimeout(() => {
+          console.log(`Worker ${id} (${urlObj.url}) timed out after 2min`);
+          reject(new Error("Worker timeout"));
+        }, 120000)
+      ),
+    ]);
+  } catch (err) {
+    if (err.message !== "Worker timeout") {
+      console.error(`Worker ${id} (${urlObj.url}) failed:`, err.message);
+    }
+  }
 };
 
 const RunTasks = async () => {
-  for (let i = 0; i < 14534554; i++) {
-    try {
-      await tasksPoll();
-    } catch {
-      // ignore batch errors
+  await loadConfig();
+  setInterval(loadConfig, 15000);
+
+  if (!globalMatch || !Array.isArray(globalMatch.config)) {
+    console.error("No matching workflow or invalid config format.");
+    return;
+  }
+  while (true) {
+    // Collect all worker promises for all urlObjs
+    counter = 0;
+    const allWorkerPromises = [];
+    for (const urlObj of globalMatch.config) {
+      const workers = urlObj.workers;
+      console.log(`[START] Starting ${workers} workers for ${urlObj.url}`);
+      for (let i = 0; i < workers; i++) {
+        allWorkerPromises.push(startWorker(i, urlObj));
+      }
     }
-    // wait between batches
+    // Wait for all workers for all urlObjs to finish before starting next round
     await new Promise((resolve) =>
       setTimeout(resolve, 5000 + Math.random() * 5000)
     );
+    await Promise.all(allWorkerPromises);
   }
 };
 
-// Start the bot
 RunTasks();
