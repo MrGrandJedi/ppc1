@@ -31,7 +31,7 @@ export const checkTz = async (username, retryCount = 1) => {
   for (let attempt = 0; attempt <= retryCount; attempt++) {
     try {
       const response = await axios.get(
-        "https://white-water-a7d6.mahdiidrissi2022.workers.dev/",
+        "https://tz.mahdiidrissi2022.workers.dev/",
         {
           httpsAgent: proxyAgent,
           timeout: 5000, // Reduced timeout to 5 seconds
@@ -71,3 +71,4 @@ export const checkTz = async (username, retryCount = 1) => {
     }
   }
 };
+
