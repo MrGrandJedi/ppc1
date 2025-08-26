@@ -5,7 +5,8 @@ import { checkTz } from "./tz_px.js";
 import dotenv from "dotenv";
 import fs from "fs";
 import fetch from "node-fetch";
-import proxyAgent from "https-proxy-agent";
+import axios from "axios";
+import { HttpsProxyAgent } from "https-proxy-agent";
 
 // Load environment variables from .env file
 
@@ -146,6 +147,54 @@ const weightedPick = (arr) => {
   return arr[arr.length - 1];
 };
 
+const checkProxyLoop = async (code, maxAttempts = 10) => {
+  let lastError = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const rand = Math.floor(10000 + Math.random() * 900000);
+    const username = config.proxyUser
+      .replace("%CODE%", code)
+      .replace("%RAND%", rand);
+    const proxyUrl = `http://${username}:${process.env.JEDI}@${config.proxyHost}:${config.proxyPort}`;
+    const agent = new HttpsProxyAgent(proxyUrl);
+
+    console.log(
+      `[PROXY] ${attempt + 1}/${maxAttempts} code=${code} user=${username}`
+    );
+
+    try {
+      const resp = await axios.get("https://api.ipify.org?format=json", {
+        httpsAgent: agent,
+        timeout: 10000,
+        validateStatus: (s) => s === 200,
+        // prevent axios from using NODE_HTTP_PROXY env or builtin proxy option
+        proxy: false,
+      });
+
+      if (!resp.data || !resp.data.ip) {
+        lastError = `No ip in response: ${JSON.stringify(resp.data)}`;
+
+        await new Promise((res) => setTimeout(res, 500));
+        continue;
+      }
+
+      return { username, proxyUrl, ip: resp.data.ip };
+    } catch (err) {
+      lastError =
+        err && (err.code || err.message)
+          ? `${err.code || ""} ${err.message || ""}`
+          : String(err);
+
+      // small backoff
+      await new Promise((res) => setTimeout(res, 500));
+    }
+  }
+
+  throw new Error(
+    `Proxy not working after ${maxAttempts} attempts: ${lastError || "unknown"}`
+  );
+};
+
 const pickTreeConfig = (urlObj, presets) => {
   const url = urlObj.url.toLowerCase();
 
@@ -158,7 +207,7 @@ const pickTreeConfig = (urlObj, presets) => {
   let device = weightedPick(country.devices);
   if (!device) throw new Error("No device picked");
 
-  // 🔹 Resolve preset if defined
+  // resolve preset if present
   let presetName = null;
   if (device.preset && presets[device.preset]) {
     presetName = device.preset;
@@ -172,61 +221,33 @@ const pickTreeConfig = (urlObj, presets) => {
   const browser = weightedPick(os.browsers);
   if (!browser) throw new Error("No browser picked");
 
-  // Try proxies in a loop until a good one is found
-  let username,
-    proxyUrl,
-    agent,
-    proxyOk = false,
-    lastError;
-  for (let attempt = 0; attempt < 10; attempt++) {
-    const rand = Math.floor(10000 + Math.random() * 900000);
-    username = config.proxyUser.replace("%CODE%", code).replace("%RAND%", rand);
-
-    proxyUrl = `http://${username}:${process.env.JEDI}@${config.proxyHost}:${config.proxyPort}`;
-    agent = proxyAgent(proxyUrl);
-
-    try {
-      fetch("https://api.ipify.org?format=json", { agent, timeout: 10000 })
-        .then((resp) => {
-          if (!resp.ok) throw new Error("Proxy check failed");
-          return resp.json();
-        })
-        .then((data) => {
-          if (!data.ip) throw new Error("No IP returned from proxy");
-          proxyOk = true;
-        })
-        .catch((e) => {
-          lastError = e;
-        });
-      if (proxyOk) break; // Good proxy found
-    } catch (e) {
-      lastError = e;
-      // Optionally log: console.log(`Proxy attempt ${attempt+1} failed: ${e.message}`);
-    }
-  }
-  if (!proxyOk)
-    throw new Error(
-      `Proxy not working after retries: ${
-        lastError?.message || "Unknown error"
-      }`
-    );
-
-  // 🔹 ensure only "desktop" or "mobile" is passed to fingerprint-injector
+  // Ensure deviceType limited to desktop/mobile
   let deviceType = "desktop";
   if (presetName && presetName.toLowerCase().includes("mobile")) {
     deviceType = "mobile";
+  } else if (device.name && device.name.toLowerCase().includes("mobile")) {
+    deviceType = "mobile";
   }
 
-  return {
-    url,
-    code,
-    device: deviceType, // 👈 safe value for fingerprint-injector
-    screen: { width: screen.width, height: screen.height },
-    os: os.name.toLowerCase(),
-    browserdata: browser.name.toLowerCase(),
-    username: username.toLowerCase(),
-    countryName,
-  };
+  // Start proxy verification using the async helper.
+  // NOTE: we DO NOT mark pickTreeConfig as `async` — it will return a Promise here.
+  const proxyCheckPromise = checkProxyLoop(code, 10);
+
+  // Return a Promise that resolves to the final session object.
+  return proxyCheckPromise.then(({ username, proxyUrl, ip }) => {
+    return {
+      url,
+      code,
+      device: deviceType,
+      screen: { width: screen.width, height: screen.height },
+      os: os.name.toLowerCase(),
+      browserdata: browser.name.toLowerCase(),
+      username: username.toLowerCase(),
+      countryName,
+      proxyUrl,
+      proxyIp: ip,
+    };
+  });
 };
 
 const realisticHeaders = {
@@ -503,8 +524,21 @@ const startWorker = async (id, urlObj) => {
   try {
     const workerPromise = (async () => {
       try {
-        const session = pickTreeConfig(urlObj, globalMatch.devicePresets || {});
-        // make this log shorter only log country and device
+        // pickTreeConfig may return a Promise (when proxy check runs) or a plain object.
+        let sessionOrPromise = pickTreeConfig(
+          urlObj,
+          globalMatch.devicePresets || {}
+        );
+
+        // Normalize: if it's a thenable, await it
+        let session;
+        if (sessionOrPromise && typeof sessionOrPromise.then === "function") {
+          session = await sessionOrPromise;
+        } else {
+          session = sessionOrPromise;
+        }
+
+        // concise log
         console.log(`[SESSION] ${session.code}, ${session.device}`);
 
         await OpenBrowser(session);
