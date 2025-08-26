@@ -5,7 +5,7 @@ import { checkTz } from "./tz_px.js";
 import dotenv from "dotenv";
 import fs from "fs";
 import fetch from "node-fetch";
-const proxyAgent = require("https-proxy-agent");
+import proxyAgent from "https-proxy-agent";
 
 // Load environment variables from .env file
 
