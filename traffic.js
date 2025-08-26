@@ -5,6 +5,7 @@ import { checkTz } from "./tz_px.js";
 import dotenv from "dotenv";
 import fs from "fs";
 import fetch from "node-fetch";
+const proxyAgent = require("https-proxy-agent");
 
 // Load environment variables from .env file
 
@@ -171,10 +172,44 @@ const pickTreeConfig = (urlObj, presets) => {
   const browser = weightedPick(os.browsers);
   if (!browser) throw new Error("No browser picked");
 
-  const rand = Math.floor(10000 + Math.random() * 900000);
-  const username = config.proxyUser
-    .replace("%CODE%", code)
-    .replace("%RAND%", rand);
+  // Try proxies in a loop until a good one is found
+  let username,
+    proxyUrl,
+    agent,
+    proxyOk = false,
+    lastError;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const rand = Math.floor(10000 + Math.random() * 900000);
+    username = config.proxyUser.replace("%CODE%", code).replace("%RAND%", rand);
+
+    proxyUrl = `http://${username}:${process.env.JEDI}@${config.proxyHost}:${config.proxyPort}`;
+    agent = proxyAgent(proxyUrl);
+
+    try {
+      fetch("https://api.ipify.org?format=json", { agent, timeout: 10000 })
+        .then((resp) => {
+          if (!resp.ok) throw new Error("Proxy check failed");
+          return resp.json();
+        })
+        .then((data) => {
+          if (!data.ip) throw new Error("No IP returned from proxy");
+          proxyOk = true;
+        })
+        .catch((e) => {
+          lastError = e;
+        });
+      if (proxyOk) break; // Good proxy found
+    } catch (e) {
+      lastError = e;
+      // Optionally log: console.log(`Proxy attempt ${attempt+1} failed: ${e.message}`);
+    }
+  }
+  if (!proxyOk)
+    throw new Error(
+      `Proxy not working after retries: ${
+        lastError?.message || "Unknown error"
+      }`
+    );
 
   // 🔹 ensure only "desktop" or "mobile" is passed to fingerprint-injector
   let deviceType = "desktop";
