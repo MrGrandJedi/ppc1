@@ -52,7 +52,7 @@ export const checkTz = async (username) => {
       await new Promise((resolve) => setTimeout(resolve, 1000)); // 1 second delay
 
       const retryResponse = await axios.get(
-        "https://tz.mahdiidrissi2022.workers.dev/",
+        "https://white-water-a7d6.mahdiidrissi2022.workers.dev/",
         {
           httpsAgent: proxyAgent,
           timeout: 10000,
@@ -83,3 +83,4 @@ export const checkTz = async (username) => {
     }
   }
 };
+
