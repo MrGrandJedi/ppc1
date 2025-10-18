@@ -6,15 +6,13 @@ import fs from "fs";
 // Load configuration from config.json
 const config = JSON.parse(fs.readFileSync("./c.json", "utf-8"));
 
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 const DEFAULT_TIMEZONES = {
   us: "America/New_York",
   uk: "Europe/London",
   fr: "Europe/Paris",
 };
 
-export const checkTz = async (username, retryCount = 1) => {
+export const checkTz = async (username) => {
   dotenv.config();
   const proxyHost = config.proxyHost;
   const proxyPort = config.proxyPort;
@@ -28,36 +26,50 @@ export const checkTz = async (username, retryCount = 1) => {
   const proxyUrl = `http://${proxyUsername}:${proxyPassword}@${proxyHost}:${proxyPort}`;
   const proxyAgent = new HttpsProxyAgent(proxyUrl);
 
-  for (let attempt = 0; attempt <= retryCount; attempt++) {
+  try {
+    const response = await axios.get(
+      "https://tz.mahdiidrissi2022.workers.dev/",
+      {
+        httpsAgent: proxyAgent,
+        timeout: 10000,
+        validateStatus: (status) => status === 200,
+      }
+    );
+
+    const timezone = response.data.trim();
+    if (timezone) {
+      return timezone;
+    }
+
+    // If we got a response but no timezone, use fallback
+    throw new Error("Empty timezone response");
+  } catch (error) {
+    console.error(`Timezone fetch failed:`, error.message);
+    console.log("Retrying once...");
+
+    // Single retry attempt
     try {
-      const response = await axios.get(
-        "https://white-water-a7d6.mahdiidrissi2022.workers.dev/",
+      await new Promise((resolve) => setTimeout(resolve, 1000)); // 1 second delay
+
+      const retryResponse = await axios.get(
+        "https://tz.mahdiidrissi2022.workers.dev/",
         {
           httpsAgent: proxyAgent,
-          timeout: 10000, // Reduced timeout to 5 seconds
-          validateStatus: (status) => status === 200, // Only accept 200 status
+          timeout: 10000,
+          validateStatus: (status) => status === 200,
         }
       );
 
-      const timezone = response.data.trim();
-      if (timezone) {
-        return timezone;
+      const retryTimezone = retryResponse.data.trim();
+      if (retryTimezone) {
+        return retryTimezone;
       }
 
-      // If we got a response but no timezone, use fallback
-      throw new Error("Empty timezone response");
-    } catch (error) {
-      console.error(`Attempt ${attempt + 1} failed:`, error.message);
+      throw new Error("Empty timezone response on retry");
+    } catch (retryError) {
+      console.error(`Retry attempt also failed:`, retryError.message);
 
-      if (attempt < retryCount) {
-        console.log(
-          `Retrying in 1 second... (Attempt ${attempt + 2}/${retryCount + 1})`
-        );
-        await delay(1000); // Reduced delay to 1 second
-        continue;
-      }
-
-      // If all retries failed, use fallback timezone based on country code
+      // If retry failed, use fallback timezone based on country code
       if (countryCode && DEFAULT_TIMEZONES[countryCode]) {
         console.log(
           `Using fallback timezone for ${countryCode}: ${DEFAULT_TIMEZONES[countryCode]}`
@@ -71,5 +83,3 @@ export const checkTz = async (username, retryCount = 1) => {
     }
   }
 };
-
-
