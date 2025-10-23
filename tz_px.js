@@ -20,67 +20,8 @@ export const checkTz = async (username) => {
   const proxyPassword = process.env.JEDI;
 
   // Extract country code from username (assuming format contains country code)
+  // if not found in username, default to 'us'
   const countryCode = username.split("-")[2]?.toLowerCase();
-
-  // Properly formatted proxy URL
-  const proxyUrl = `http://${proxyUsername}:${proxyPassword}@${proxyHost}:${proxyPort}`;
-  const proxyAgent = new HttpsProxyAgent(proxyUrl);
-
-  try {
-    const response = await axios.get(
-      "https://tz.mahdiidrissi2022.workers.dev/",
-      {
-        httpsAgent: proxyAgent,
-        timeout: 10000,
-        validateStatus: (status) => status === 200,
-      }
-    );
-
-    const timezone = response.data.trim();
-    if (timezone) {
-      return timezone;
-    }
-
-    // If we got a response but no timezone, use fallback
-    throw new Error("Empty timezone response");
-  } catch (error) {
-    console.error(`Timezone fetch failed:`, error.message);
-    console.log("Retrying once...");
-
-    // Single retry attempt
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // 1 second delay
-
-      const retryResponse = await axios.get(
-        "https://white-water-a7d6.mahdiidrissi2022.workers.dev/",
-        {
-          httpsAgent: proxyAgent,
-          timeout: 10000,
-          validateStatus: (status) => status === 200,
-        }
-      );
-
-      const retryTimezone = retryResponse.data.trim();
-      if (retryTimezone) {
-        return retryTimezone;
-      }
-
-      throw new Error("Empty timezone response on retry");
-    } catch (retryError) {
-      console.error(`Retry attempt also failed:`, retryError.message);
-
-      // If retry failed, use fallback timezone based on country code
-      if (countryCode && DEFAULT_TIMEZONES[countryCode]) {
-        console.log(
-          `Using fallback timezone for ${countryCode}: ${DEFAULT_TIMEZONES[countryCode]}`
-        );
-        return DEFAULT_TIMEZONES[countryCode];
-      }
-
-      // If we can't determine country code, use US as default
-      console.log("Using default US timezone as fallback");
-      return "America/New_York";
-    }
-  }
+  const timezone = DEFAULT_TIMEZONES[countryCode] || DEFAULT_TIMEZONES["us"];
+  return timezone;
 };
-
